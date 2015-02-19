@@ -1,0 +1,4 @@
+/Users/ryancheu/AndroidStudioProjects/FlappyBare/app/build/intermediates/classes/debug
+/Users/ryancheu/AndroidStudioProjects/FlappyBare/app/build/intermediates/pre-dexed/debug/support-annotations-21.0.3-518b986802d6a54179c9d2223c08267eb36b2fea.jar
+/Users/ryancheu/AndroidStudioProjects/FlappyBare/app/build/intermediates/pre-dexed/debug/internal_impl-21.0.3-dce09b32d60efddea3fcd77f101ab718b258edbd.jar
+/Users/ryancheu/AndroidStudioProjects/FlappyBare/app/build/intermediates/pre-dexed/debug/classes-709fcf9f769bf9c6544736407ea43ab899c14cdb.jar
