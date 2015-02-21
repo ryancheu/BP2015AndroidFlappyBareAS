@@ -6,9 +6,14 @@ import java.util.Random;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.media.MediaPlayer;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -32,16 +37,16 @@ public class GameView extends View {
     private final int PLAYER_START_POSITION = -1000;
 
     /** Player's y position, pixels from the top of the screen **/
-    private float playerY = 0;
+    private float playerY = 20;
 
     /**
      * How far the player has traveled. Starts negative so that we don't have a
      * pipe right away
      **/
-    private int distanceTraveled = PLAYER_START_POSITION;
+    private float distanceTraveled = PLAYER_START_POSITION;
 
     /** the change, in pixels, of the player Y position per second **/
-    private float playerYVel = 0;
+    private float playerYVel = 10;
 
     /** the paintbrush we use **/
     private Paint paint;
@@ -66,12 +71,38 @@ public class GameView extends View {
     /** Random number generator **/
     private Random random;
 
+    private int nextPipeToPass = 0;
+
+    private Bitmap birdBitmap;
+    private Bitmap backgroundBitmap;
+    private Bitmap topPipeBitmap;
+    private Bitmap bottomPipeBitmap;
+
+    private MediaPlayer flapPlayer;
+
     /** If true, don't move the player **/
     private boolean paused = false;
 
     public GameView(Context context) {
         super(context);
+        flapPlayer = MediaPlayer.create(getContext(),
+                R.raw.sfx_wing);
         paint = new Paint();
+        birdBitmap = BitmapFactory.decodeResource(
+                getResources(),
+                R.drawable.bird);
+        backgroundBitmap = BitmapFactory.decodeResource(
+                getResources(),
+                R.drawable.background);
+        topPipeBitmap = BitmapFactory.decodeResource(
+                getResources(),
+                R.drawable.obstacle_top);
+
+        bottomPipeBitmap = BitmapFactory.decodeResource(
+                getResources(),
+                R.drawable.obstacle_bottom);
+
+
 
         // We seed the random number generator with current time so that the
         // pipes always start at different positions.
@@ -101,7 +132,7 @@ public class GameView extends View {
          */
 
         // Draw everything on the screen
-        drawBackgroud(canvas);
+        drawBackground(canvas);
         drawPlayer(canvas);
         drawPipes(canvas);
         drawScore(canvas);
@@ -125,6 +156,7 @@ public class GameView extends View {
     private void drawPipes(Canvas canvas) {
 
         for (int index : getPipesOnScreen()) {
+            //drawPipe(index, isTop, canvas)
             drawPipe(index, true, canvas);
             drawPipe(index, false, canvas);
         }
@@ -137,8 +169,10 @@ public class GameView extends View {
     private ArrayList<Integer> getPipesOnScreen() {
 
         // TODO: Replace lowIndex and highIndex with better bounds
-        final int lowIndex = 0;
-        final int highIndex = 2;
+        final int lowIndex = ((int)distanceTraveled - screenWidth)
+                / (PIPE_WIDTH + DIST_BETWEEN_PIPE);
+        final int highIndex = ((int) distanceTraveled + 2 * screenWidth)
+                / (PIPE_WIDTH + DIST_BETWEEN_PIPE);
         ArrayList<Integer> returnPipes = new ArrayList<Integer>();
         for (int i = lowIndex; i < highIndex; i++) {
             if (i >= 0) {
@@ -152,16 +186,26 @@ public class GameView extends View {
      * This is the x-coordinate of the left side of a pipe
      */
     private int getPipeLeft(int index) {
-        // TODO: Vary this with the distanceTraveled of the player, pipe index
-        return 50;
+        // TODO: Vary this with the distanceTraveled
+        // of the player, pipe index
+        // 0 * (PIPE_WIDTH + DIST_BETWEEN)
+        // 1 * "
+        // 2 * "
+        //            absolute position                   - playerPosition
+        return (index * (PIPE_WIDTH + DIST_BETWEEN_PIPE)) - (int)distanceTraveled;
     }
 
     /**
      * This is is the y-coordinate of the bottom of the top pipe
      */
     private int getPipeHeight(int index) {
-        // TODO: Provide a different height for each pipe
-        return 100;
+        if (pipeHeights.size() - 1 < index) {
+            for ( int i = pipeHeights.size() - 1; i < index; i++ ) {
+                pipeHeights.add(random.nextInt
+                        (screenHeight - PIPE_OPENING_HEIGHT));
+            }
+        }
+        return pipeHeights.get(index);
     }
 
     /**
@@ -184,8 +228,17 @@ public class GameView extends View {
     }
 
     private void drawPipe(int index, boolean isTopPipe, Canvas canvas) {
-        // TODO: Draw a single pipe, either top or bottom depending on value of
-        // isTopPipe
+        // TODO: Draw a single pipe, either top or bottom
+        // depending on value of isTopPipe
+        // paint.setColor(Color.GREEN);
+        RectF pipeBox = getPipeBoundingBox(index, isTopPipe);
+        if ( isTopPipe ) {
+            canvas.drawBitmap(topPipeBitmap, null, pipeBox, paint);
+        }
+        else {
+            canvas.drawBitmap(bottomPipeBitmap, null, pipeBox, paint);
+        }
+
     }
 
     /**
@@ -199,14 +252,24 @@ public class GameView extends View {
 
         playerRect = new RectF(left, top, right, bottom);
 
+        // paint.setColor(Color.YELLOW);
+        canvas.drawBitmap(birdBitmap, null, playerRect, paint);
+        // canvas.drawRect(playerRect, paint);
+
         // TODO: Draw the player inside the rectangle
     }
 
     private void drawScore(Canvas canvas) {
-        // TODO: Draw the current score on the screen
+        paint.setTextSize(40);
+        paint.setColor(Color.BLACK);
+        canvas.drawText("score: " + nextPipeToPass, 40, 40, paint);
     }
 
-    private void drawBackgroud(Canvas canvas) {
+    private void drawBackground(Canvas canvas) {
+        RectF screenRect = new RectF(0,0,screenWidth,
+                screenHeight);
+        canvas.drawBitmap(backgroundBitmap,
+                null, screenRect, paint);
         // TODO: Draw the background on the screen
     }
 
@@ -216,6 +279,9 @@ public class GameView extends View {
      **/
     private void checkCollisions() {
         // TODO: check if the player has collided with the floor or ceiling
+        if ( playerY < 0 || playerY > (screenHeight - PLAYER_HEIGHT)) {
+            gameOver();
+        }
 
         for (int index : getPipesOnScreen()) {
             // These are bounding boxes for the top and bottom pipes
@@ -223,11 +289,18 @@ public class GameView extends View {
 
             RectF bottomPipe = getPipeBoundingBox(index, false);
 
+            if ( RectF.intersects(playerRect, topPipe)
+                    || RectF.intersects(playerRect, bottomPipe)) {
+                gameOver();
+            }
+
             // TODO: check if any of the pipes collide with player
         }
     }
 
     private void gameOver() {
+        paused = true;
+        showScoreDialog(nextPipeToPass);
         // TODO: reset game, show score screen
     }
 
@@ -236,6 +309,11 @@ public class GameView extends View {
      */
     private void reset() {
         lastFrame = -1;
+        playerY = screenHeight/2;
+        playerYVel = 0;
+        distanceTraveled = PLAYER_START_POSITION;
+        pipeHeights = new ArrayList<Integer>();
+        nextPipeToPass = 0;
         // TODO: set variables to initial values
     }
 
@@ -247,6 +325,9 @@ public class GameView extends View {
     public boolean onTouchEvent(MotionEvent event) {
         switch (event.getAction()) {
         case MotionEvent.ACTION_DOWN:
+            playerYVel = -400;
+            flapPlayer.seekTo(0);
+            flapPlayer.start();
             // TODO: make player go up, play sound
             break;
         }
@@ -267,6 +348,19 @@ public class GameView extends View {
         if (lastFrame != -1) {
             long diff = currentTime - lastFrame;
             float mult = ((float) diff / 1000f);
+            playerYVel += mult * 500;
+            playerY = playerY + (playerYVel * mult);
+
+            //distanceTraveled = (float)distanceTraveled + (float)(mult * 200);
+            //-4 + 0.5 -> -3.5 -> -3
+            //0 + 0.5 -> 0.5 -> 0
+            distanceTraveled  += (mult * 200.0);
+
+            int passPipeRightEdge = getPipeLeft(nextPipeToPass) + PIPE_WIDTH;
+            if ( passPipeRightEdge < PLAYER_OFFSET) {
+                nextPipeToPass += 1;
+            }
+
 
             // TODO: move player, add gravity, check to see if we've passed any
             // pipes and update score if we have
@@ -293,6 +387,8 @@ public class GameView extends View {
                 });
 
         AlertDialog dialog = builder.create();
+
+        dialog.show();
 
         // TODO: show the pop up
     }
